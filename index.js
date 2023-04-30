@@ -172,8 +172,13 @@ app.post('/loginSubmit', async (req,res) => {
     var email = req.body.email;
     var password = req.body.password;
 
-	const schema = Joi.string().max(20).required();
-	const validationResult = schema.validate(email);
+	const schema = Joi.object(
+        {
+        email: Joi.string().max(20).required(),
+        password: Joi.string().max(20).required()
+        }
+    );
+	const validationResult = schema.validate({email, password});
 	if (validationResult.error != null) {
 	   console.log(validationResult.error);
 	   res.redirect("/login");
