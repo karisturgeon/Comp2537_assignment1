@@ -38,6 +38,7 @@ const navLinks = [
     { name: "Log In", link: "/login" },
     { name: "Members", link: "/members" },
     { name: "404", link: "/404" },
+    { name: "Admin", link: "/admin"},
     { name: "Log Out", link: "/logout" }
 
 ]
