@@ -27,10 +27,10 @@ var { database } = include('databaseConnection');
 
 app.use(express.urlencoded({ extended: false }));
 
-
 const userCollection = database.db(mongodb_database).collection('users');
 
-var error;
+app.set('view engine', 'ejs');
+
 
 var mongoStore = MongoStore.create({
     mongoUrl: `mongodb+srv://${mongodb_user}:${mongodb_password}@${mongodb_host}/sessions`,
@@ -47,50 +47,53 @@ app.use(session({
 }
 ));
 
+function isValidSession(req) {
+    if (req.session.authenticated) {
+        return true;
+    }
+    return false;
+}
+
+function sessionValidation(req,res,next) {
+    if (isValidSession(req)) {
+        next();
+    }
+    else {
+        res.redirect('/login');
+    }
+}
+
+function isAdmin(req) {
+    if (req.session.user_type == 'admin') {
+        return true;
+    }
+    return false;
+}
+
+function adminAuthorization(req, res, next) {
+    if (!isAdmin(req)) {
+        res.status(403);
+        res.render("errorMessage", {error: "Not Authorized"});
+        return;
+    }
+    else {
+        next();
+    }
+}
 
 app.get('/', (req, res) => {
-    if (!req.session.authenticated) {
-        var html = `
-        <h1>Welcome!</h1>
-        <form action='/login' method='get'>
-        <button>Log In</button>
-        </form>
-        <form action='/signup' method='get'>
-        <button>Sign Up</button>
-        </form>
-        `;
-        res.send(html);
+    if (!isValidSession(req)) {
+        res.render("index");
+
     }
     else {
         var name = req.session.name;
-        var html = `
-        <h1>Welcome, ${name}!</h1>
-        <form action='/members' method='get'>
-        <button>Go to Members Area</button>
-        </form>
-        <form action='/logout' method='get'>
-        <button>Logout</button>
-        </form>
-        `;
-        res.send(html);
+        res.render("index-loggedin", {name: name});
     }
 });
 
 app.get('/signup', (req, res) => {
-    var html = `
-    Create User
-    <form action='/signupSubmit' method='post'>
-    <input name='name' type='text' placeholder='name'>
-    <br>
-    <input name='email' type='email' placeholder='email'>
-    <br>
-    <input name='password' type='password' placeholder='password'>
-    <br>
-    <button>Submit</button>
-    </form>
-    `;
-    res.send(html);
-
+res.render("signup")
 })
 
 
@@ -143,7 +146,7 @@ app.post('/signupSubmit', async (req, res) => {
 
     var hashedPassword = await bcrypt.hash(password, saltRounds);
 
-    await userCollection.insertOne({ name: name, password: hashedPassword, email: email });
+    await userCollection.insertOne({ name: name, password: hashedPassword, email: email, user_type: "user" });
     console.log("Inserted user");
     req.session.authenticated = true;
     req.session.email = email;
@@ -157,15 +160,7 @@ app.post('/signupSubmit', async (req, res) => {
 
 
 app.get('/login', (req, res) => {
-    var html = `
-    Log In
-    <form action='/loginSubmit' method='post'>
-    <input name='email' type='text' placeholder='email'>
-    <input name='password' type='password' placeholder='password'>
-    <button>Submit</button>
-    </form>
-    `;
-    res.send(html);
+res.render("login");
 });
 
 app.post('/loginSubmit', async (req,res) => {
@@ -185,16 +180,12 @@ app.post('/loginSubmit', async (req,res) => {
 	   return;
 	}
 
-	const result = await userCollection.find({email: email}).project({email: 1, password: 1, _id: 1, name: 1}).toArray();
+	const result = await userCollection.find({email: email}).project({email: 1, password: 1, _id: 1, name: 1, user_type: 1}).toArray();
 
 	console.log(result);
 	if (result.length != 1) {
 		console.log("user not found");
-        var html = `
-        Invalid email/password combination.
-        <br>
-        <a href='/login'>Try Again</a>`;
-        res.send(html);
+res.render("login-error");
 		return;
 	}
 	if (await bcrypt.compare(password, result[0].password)) {
@@ -203,51 +194,25 @@ app.post('/loginSubmit', async (req,res) => {
 		req.session.authenticated = true;
 		req.session.email = email;
         req.session.name = name;
+        req.session.user_type = result[0].user_type;
 		req.session.cookie.maxAge = expireTime;
 		res.redirect('/members');
 		return;
 	}
 	else {
 		console.log("incorrect password");
-        var html = `
-        Invalid email/password combination.
-        <br>
-        <a href='/login'>Try Again</a>`;
-        res.send(html);
+        res.render("login-error");
 		return;
 	}
 });
 
 
-
-
 app.get('/members', (req, res) => {
-    if (!req.session.authenticated) {
+    if (!isValidSession(req)) {
         res.redirect('/');
     }
-    var rand = Math.floor(Math.random() * 3);
-    var pic;
-    if (rand == 0) {
-        pic = 'jim.gif';
-    } else if (rand == 1) {
-        pic = 'michael.gif';
-    } else {
-        pic = 'stanley.gif';
-    }
-
-
-    var html = `
-    You are logged in!
-    <br>
-    <img src='/${pic}' style='width:250px;'>
-    <form action='/logout' method='get'>
-    <button>Sign Out</button>
-    </form> 
-    `;
-    res.send(html);
-
-
-
+    res.render("members");
+    console.log(req.session.user_type);
 })
 
 app.get('/logout', (req, res) => {
@@ -255,16 +220,28 @@ app.get('/logout', (req, res) => {
     res.redirect('/');
 })
 
+app.post('/users', async (req, res) => {
+    const { name, action } = req.body;
+  
+    if (action === 'promote') {
+      await userCollection.updateOne({ name }, { $set: { user_type: 'admin' } });
+    } else if (action === 'demote') {
+      await userCollection.updateOne({ name }, { $set: { user_type: 'user' } });
+    }
+  
+    res.redirect('/admin'); // Redirect to home page after update
+  });
+
+app.get('/admin', sessionValidation, adminAuthorization, async (req, res) => {
+    const result = await userCollection.find().project({name: 1, _id: 1, user_type: 1}).toArray();
+res.render('admin', {users: result});
+})
+
 app.use(express.static(__dirname + "/public"));
 
 app.get("*", (req, res) => {
     res.status(404);
-    var html = `
-    Page Not Found - 404
-    <br>
-    <img src='/kevin.gif'>
-    `;
-    res.send(html);
+    res.render("404");
 })
 
 app.listen(port, () => {

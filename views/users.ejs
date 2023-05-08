@@ -1,0 +1,9 @@
+<%
+async function promoteUser(name) {
+    await userCollection.updateOne({name: name}, {$set: {user_type: 'admin'}});
+} %>
+<%
+async function demoteUser(name) {
+    await userCollection.updateOne({name: name}, {$set: {user_type: 'user'}});
+}
+%>

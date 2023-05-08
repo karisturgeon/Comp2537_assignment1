@@ -1,0 +1,12 @@
+<%- include("templates/header") %> 
+<h2>Create User</h2>
+<form action='/signupSubmit' method='post'>
+<input type="text" name='name' placeholder='name' class="form-control" aria-label="Sizing example input" aria-describedby="inputGroup-sizing-default">
+<br>
+<input type="email" name='email' placeholder='email' class="form-control" aria-label="Sizing example input" aria-describedby="inputGroup-sizing-default">
+<br>
+<input type="password" name='password' placeholder='password' class="form-control" aria-label="Sizing example input" aria-describedby="inputGroup-sizing-default">
+<br>
+<input class="btn btn-primary" type="submit" value="Submit">
+</form>
+<%- include("templates/footer") %> 
